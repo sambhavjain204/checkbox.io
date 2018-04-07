@@ -2,8 +2,9 @@ var mongo = require('mongodb');
 var crypto = require('crypto');
 var emailjs = require('emailjs/email');
 var models = require('./studyModel.js');
+var redis = require('redis');
+var client = redis.createClient(6379, '127.0.0.1', {})
 
- 
 var Server = mongo.Server,
     Db = mongo.Db,
     BSON = mongo.BSONPure;
@@ -25,47 +26,61 @@ var emailServer  = emailjs.server.connect({
 });
 
 exports.createStudy = function(req, res) {
-
-    var invitecode = req.body.invitecode; 
-    var studyKind = req.body.studyKind;
-
-    if( invitecode != "RESEARCH" )
-    {
-        res.send({'error':'Invalid invitecode'});
-        return;
-    }
-
-    basicCreate( req, res, studyKind ).onCreate( function(study)
-    {
-    	db.collection('studies', function(err, collection) 
-    	{
-    		if( err )
-    			console.log( err );
-
-        	collection.insert(study, {safe:true}, function(err, result) 
-        	{
-        		console.log( err || "Study created: " + study._id );
-
-        		if( err )
-        		{
-        			res.send({error: err });
-        		}
-        		else
-        		{
-                    study.setPublicLink( study._id );
-
-                    // update with new public link, and notify via email, redirect user to admin page.
-                    collection.update( {'_id' : study._id}, {'$set' : {'publicLink' : study.publicLink}},
-                        function(err, result )
+    
+    try {
+        client.get('createFlag', function(err, reply)   {
+            if(reply == 'false')    {
+                req.send('[REDIS] --> This operation is invalid, check your create flag');
+            }
+            else    {
+                var invitecode = req.body.invitecode; 
+                var studyKind = req.body.studyKind;
+            
+                if( invitecode != "RESEARCH" )
+                {
+                    res.send({'error':'Invalid invitecode'});
+                    return;
+                }
+            
+                basicCreate( req, res, studyKind ).onCreate( function(study)
+                {
+                    db.collection('studies', function(err, collection) 
                     {
-                        sendStudyEmail( study );
-                        res.send({admin_url: study.adminLink});
+                        if( err )
+                            console.log( err );
+            
+                        collection.insert(study, {safe:true}, function(err, result) 
+                        {
+                            console.log( err || "Study created: " + study._id );
+            
+                            if( err )
+                            {
+                                res.send({error: err });
+                            }
+                            else
+                            {
+                                study.setPublicLink( study._id );
+            
+                                // update with new public link, and notify via email, redirect user to admin page.
+                                collection.update( {'_id' : study._id}, {'$set' : {'publicLink' : study.publicLink}},
+                                    function(err, result )
+                                {
+                                    sendStudyEmail( study );
+                                    res.send({admin_url: study.adminLink});
+                                });
+                            }
+                        });
+            
                     });
-        		}
-        	});
-
+                });
+            }
+            console.log("Value of createStudy: " + reply);
         });
-    });
+        }
+    
+    catch(e){
+        res.send('Error Encountered');
+    }
 };
 
 
