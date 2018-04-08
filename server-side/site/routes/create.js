@@ -30,7 +30,8 @@ exports.createStudy = function(req, res) {
     try {
         client.get('createFlag', function(err, reply)   {
             if(reply == 'false')    {
-                req.send('[REDIS] --> This operation is invalid, check your create flag');
+                res.send({'error':'This operation is invalid, check your createFlag'});
+                return;
             }
             else    {
                 var invitecode = req.body.invitecode; 
